@@ -129,7 +129,7 @@ class E_trade (Broker):
         
 def init_brokers() -> list[Broker]:
     brokers = []
-    brokers.append(E_trade("./config/e_trade_config.json","etrade"))
+    brokers.append(E_trade("./local_config/e_trade_config.json","etrade"))
     return brokers
 
 def main():
