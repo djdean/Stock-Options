@@ -1,7 +1,5 @@
 import requests
 import json
-import nasdaqdatalink
-import datetime
 from rauth import OAuth1Service
 import webbrowser
 
@@ -131,7 +129,7 @@ class E_trade (Broker):
         
 def init_brokers() -> list[Broker]:
     brokers = []
-    brokers.append(E_trade("./e_trade_config.json","etrade"))
+    brokers.append(E_trade("./config/e_trade_config.json","etrade"))
     return brokers
 
 def main():
