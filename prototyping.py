@@ -1,6 +1,6 @@
 import requests
 import json
-from rauth import OAuth1Service
+from authlib.integrations.requests_client import OAuth1Session
 import webbrowser
 
 class Config:
@@ -54,58 +54,47 @@ class E_trade (Broker):
         self.name = name
         self.config_options = Config(config_path)
         self.config_data = self.config_options.read_config()
-
-    def create_service_wrapper(self,prod=False) -> OAuth1Service:
-        config_consumer_key=self.config_data.get('e_trade_sb_oauth_consumer_key')
-        config_consumer_secret=self.config_data.get('e_trade_sb_oauth_consumer_secret')
-        if prod:
-            config_consumer_key=self.config_data.get('e_trade_prod_oauth_consumer_key')
-            config_consumer_secret=self.config_data.get('e_trade_prod_oauth_consumer_secret')
-        service_oauth_wrapper = OAuth1Service(
-            name=self.name,
-            consumer_key=config_consumer_key,
-            consumer_secret=config_consumer_secret,
-            request_token_url=self.config_data.get('request_token_url'),
-            access_token_url=self.config_data.get('access_token_url'),
-            authorize_url=self.config_data.get('authorize_url'),
-            base_url=self.config_data.get('sb_base_url'))
-        return service_oauth_wrapper
+        self.prod = self.config_data.get('prod')
+        self.config_consumer_key=self.config_data.get('e_trade_sb_oauth_consumer_key')
+        self.config_consumer_secret=self.config_data.get('e_trade_sb_oauth_consumer_secret')
+        if self.prod:
+            self.config_consumer_key=self.config_data.get('e_trade_prod_oauth_consumer_key')
+            self.config_consumer_secret=self.config_data.get('e_trade_prod_oauth_consumer_secret')
+        self.options_url = self.config_data.get('sb_options_url')
+        self.quotes_url = self.config_data.get('sb_quote_url')
+        if self.prod:
+            self.options_url = self.config_data.get('prod_options_url')
+            self.quotes_url = self.config_data.get('prod_quote_url')
+    
+    def create_authlib_session(self) -> OAuth1Session:  
+        client = OAuth1Session(self.config_consumer_key, self.config_consumer_secret)
+        return client
 
     def authorize(self):
-        print("Authorizing Application...")
-        prod = False
-        if self.config_data.get('prod') == 'True':
-            prod = True
-        self.service_wrapper = self.create_service_wrapper(prod)
-        request_token, request_token_secret =  self.service_wrapper.get_request_token(
-            params={"oauth_callback": "oob", "format": "json"})
-        print("E-Trade OAuth Request Token: " + str(request_token))
-        authorize_url =  self.service_wrapper.authorize_url.format( self.service_wrapper.consumer_key, request_token)
-        print("E-Trade OAuth Authorize URL: " + authorize_url)
-        print("E-Trade OAuth Request Token Secret: " + str(request_token_secret))
+        print("Authorizing Application...")      
+        self.session = self.create_authlib_session()
+        self.session.redirect_uri = 'oob'
+        request_token = self.session.fetch_request_token(self.config_data.get('request_token_url'))
+        print("E-Trade OAuth Request Token: " + str(request_token['oauth_token']))
+        authorization_url = self.config_data.get('authorize_url').format( self.config_consumer_key, request_token['oauth_token'])        
+        print("E-Trade OAuth Authorize URL: " + authorization_url)
         print("E-Trade Request Token: " + str(request_token))
-        webbrowser.open(authorize_url)
+        webbrowser.open(authorization_url)
         text_code = input("Please accept agreement and enter verification code from browser: ")
-        self.session =  self.service_wrapper.get_auth_session(request_token,
-                                  request_token_secret,
-                                  params={"oauth_verifier": text_code})
+        access_token = self.session.fetch_access_token(self.config_data.get('access_token_url'), verifier=text_code)
+        print("E-Trade OAuth Access Token: " + str(access_token))
         return True
 
     def get_quotes(self, symbol):
-        prod = self.config_data.get('prod')
-        url = self.config_data.get('sb_quote_url') + "/" + symbol
-        if prod:
-            url = self.config_data.get('prod_quote_url') + "/" + symbol
-        print(url)
-        response = self.session.get(url, header_auth=False)
+        quotes_url = self.quotes_url + "/" + symbol
+        print(quotes_url)
+        response = self.session.get(quotes_url)
         return response.text
 
-    def get_options_data(self, symbol):
-        prod = self.config_data.get('prod')
-        url = self.config_data.get('sb_options_url') + "/" + symbol
-        if prod:
-            url = self.config_data.get('prod_options_url') + "/" + symbol
-        response = self.session.get(url, header_auth=False, params={"symbol": symbol})
+    def get_options_data(self, symbol):     
+        options_url = self.options_url + "?symbol=" + symbol
+        print(options_url)
+        response = self.session.get(options_url)
         return response.text
     
     def check_config(self):
